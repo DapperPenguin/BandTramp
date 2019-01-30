@@ -10,8 +10,8 @@ def printTags(track):
 	print(track)
 
 def setTrackName(track, name):
-	track.add(TSOT(name))
-	track.add(TIT2(name))
+	track.add(TSOT(encoding=3, text=name))
+	track.add(TIT2(encoding=3, text=name))
 
 def printTrackName(track):
 	print('TSOT: '+track['TSOT'])
@@ -19,19 +19,19 @@ def printTrackName(track):
 
 def printArtistName(track):
 	print('TPE2: '+track['TPE2'])
-	print('TSO2: '+track['TPE2'])
+	print('TSOT: '+track['TPE2'])
 
 def setArtistName(track, name):
-	track.add(TPE2(name))
-	track.add(TSO2(name))
+	track.add(TPE2(encoding=3, text=name))
+	track.add(TSOT(encoding=3, text=name))
 
 def printAlbumName(track):
 	print('TALB: '+track['TALB'])
 	print('TSOA: '+track['TSOA'])
 
 def setAlbumName(track, name):
-	track.add(TALB(name))
-	track.add(TSOA(name))
+	track.add(TALB(encoding=3, text=name))
+	track.add(TSOA(encoding=3, text=name))
 
 def printAlbumArt(track):
 	img = track['APIC:thumbnail']
@@ -53,7 +53,7 @@ def printTrackNumber(track):
 	print('TRCK: '+track['TRCK'])
 
 def setTrackNumber(track, num):
-	track.add(TRCK(num))
+	track.add(TRCK(encoding=3, text=num))
 
 if(len(sys.argv) < 2):
 	print("""
@@ -94,6 +94,7 @@ while True:
 	elif(resp.strip() == '5'):
 		setTrackNumber(track, input("New Track Number: "))
 
+	track.save(filePath)
 	cont = input('Edit more tags (Y/N)?: ')
 	if(cont != 'y' and cont != 'Y'):
 		break
