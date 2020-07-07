@@ -1,138 +1,80 @@
-import os
-import sys
-import enum
-from mutagen.mp3 import MP3
-from mutagen.id3 import ID3NoHeaderError
-from mutagen.id3 import ID3, TIT2, TALB, TPE1, TPE2, COMM, USLT, TCOM, TCON, TDRC, TRCK, APIC, TSOT, TSOA, TSO2
+import argparse
+import glob
+import music_tag
+
+def printTags(track):
+	print(track)
+
+### TrackName ###
+def setTrackName(track, name):
+	track['tracktitle'] = name
+
+def printTrackName(track):
+	print(track['tracktitle'])
+
+### Artist ###
+def setArtistName(track, name):
+	track['artist'] = name
+	track['albumartist'] = name
+	track['composer'] = name
+
+def printArtistName(track):
+	print(track['artist'])
+
+### Album ###
+def setAlbumName(track, name):
+	track['album'] = name
+
+def printAlbumName(track):
+	print(track['album'])
+
+### Album Art ###
+def setAlbumArt(track, imgPath):
+	with open('music_tag/test/sample/imgA.jpg', 'rb') as img_in:
+		track['artwork'] = img_in.read()
+
+### Track ###
+def setTrackNumber(track, num):
+	track['tracknumber'] = num
+	# track.add(TRCK(encoding=3, text=num))
+	# track.save()
+
+def printTrackNumber(track):
+	print(track['tracknumber'])
 
 
-def printTags(tracks):
-	# print(track)
-	for track in tracks:
-		print(track)
-		print('\n\n')
+### Declaring the command line arguments ###
+parser = argparse.ArgumentParser(description='Edits the metadata of media files')
+parser.add_argument('path', metavar='FILE PATH', nargs='?', help='The path of the file(s) to be edited')
+parser.add_argument('-name', metavar='Name', nargs='?', help='The new name for the track')
+parser.add_argument('-artist', metavar='Artist', nargs='?', help='The new artist for the track')
+parser.add_argument('-album', metavar='Album', nargs='?', help='The new album for the track')
+parser.add_argument('-number', metavar='Number', nargs='?', help='The new number for the track')
+parser.add_argument('-numbers', metavar='Numbers', nargs='+', help='A list of numbers to map to the given collection of tracks')
+parser.add_argument('-art', metavar='Art', nargs='?', help='The new art for the track')
 
-def setTrackName(tracks, name):
-	for track in tracks:
-		track.add(TSOT(encoding=3, text=name))
-		track.add(TIT2(encoding=3, text=name))
-		track.save()
+# parse the command line input
+args = vars(parser.parse_args())
 
-def printTrackName(tracks):
-	for track in tracks:
-		print('TSOT: '+track['TSOT'])
-		print('TIT2: '+track['TIT2'])
+if not (args['numbers'] is None): # if numbers list is provided
+	args['numbers'].reverse() # reverse it
 
-def printArtistName(tracks):
-	for track in tracks:
-		print('TPE2: '+track['TPE2'])
-		print('TSOT: '+track['TSOT'])
-		print('TPE1: '+track['TPE1'])
-
-def setArtistName(tracks, name):
-	for track in tracks:
-		track.add(TPE2(encoding=3, text=name))
-		track.add(TSOT(encoding=3, text=name))
-		track.add(TPE1(encoding=3, text=name))
-		track.save()
-
-def printAlbumName(tracks):
-	for track in tracks:
-		print('TALB: '+track['TALB'])
-		print('TSOA: '+track['TSOA'])
-
-def setAlbumName(tracks, name):
-	for track in tracks:
-		track.add(TALB(encoding=3, text=name))
-		track.add(TSOA(encoding=3, text=name))
-		track.save()
-
-def printAlbumArt(tracks):
-	for track in tracks:
-		img = track['APIC:thumbnail']
-		print(img.mime+'\n'+ArtType[img.type]+'\n'+img.desc)
-
-def setAlbumArt(tracks, imgPath):
-	for track in tracks:
-		fileType = imgPath[imgPath.rfind('.')+1:].strip()
-		track["APIC:thumbnail"] = APIC(
-			encoding = 3,
-			mime = 'image/'+fileType,
-			type = 3,
-			desc=u'Cover',
-			data = open(imgPath, 'rb').read()
-		)
-		track.save()
-
-def printTrackNumber(tracks):
-	for track in tracks:
-		print('TRCK: '+track['TRCK'])
-
-def setTrackNumber(tracks, num):
-	for track in tracks:
-		track.add(TRCK(encoding=3, text=num))
-		track.save()
-
-tracks = []
-
-if(len(sys.argv) < 2):
-	print("""
-	Usage: python TagEdit.py [file path]
-
-	file path - The location of the filePath (in any of the following formats)
-				- from the current directory
-				- a full path
-				- * (from the current directory)
-	""")
-	exit()
-elif(('/' not in sys.argv[1]) and ('\\' not in sys.argv[1]) and ('*' not in sys.argv[1])):
-	filePath = './'+sys.argv[1]
-	tracks.append(ID3(filePath))
-elif('*' in sys.argv[1]):
-	for file in os.listdir('./'+sys.argv[1][:sys.argv[1].find('*')]):
-		if(file.endswith('.mp3')):
-			tracks.append(ID3('./'+sys.argv[1][:sys.argv[1].find('*')]+file))
-else:
-	filePath = sys.argv[1]
-	tracks.append(ID3(filePath))
+# a dictionary relating the values to be set
+# to the functions that set them
+funcs = {
+	'name' : setTrackName,
+	'artist' : setArtistName,
+	'album' : setAlbumName,
+	'number' : setTrackNumber,
+	'art' : setAlbumArt,
+	'numbers' : (lambda track, num: setTrackNumber(track, args['numbers'].pop()) if len(args['numbers']) else False)
+}
 
 
-
-
-
-while True:
-	resp = input(
-		"""
-	Select a tag to edit:
-	1)	Track
-	2)	Artist
-	3)	Album
-	4)	Cover Art
-	5)	Track Number
-	6)  (print tags)
-		"""
-	)
-
-	if(resp.strip() == '1'):
-		setTrackName(tracks, input("New track name: "))
-	elif(resp.strip() == '2'):
-		setArtistName(tracks, input("New artist name: "))
-	elif(resp.strip() == '3'):
-		setAlbumName(tracks, input("New album name: "))
-	elif(resp.strip() == '4'):
-		setAlbumArt(tracks, input("Path to new cover art: "))
-	elif(resp.strip() == '5'):
-		setTrackNumber(tracks, input("New Track Number: "))
-	elif(resp.strip() == '6'):
-		printTags(tracks)
-	else:
-		exit()
-
-	
-	cont = input('Edit more tags (Y/N)?: ')
-	if(cont != 'y' and cont != 'Y'):
-		break
-
-
-
-
+if not (args['path'] is None): # if a path is given
+	for file in glob.glob(args['path']): # for every file it refers to
+		f = music_tag.load_file(file) # load tags from file
+		for arg, val in list(args.items())[1:]: # for every tag in that file (excluding path itself)
+			if not (val is None): # if a value for this tag was given
+				funcs[arg](f, val) # set the appropriate tag to the given value
+		f.save() # write tags to file
