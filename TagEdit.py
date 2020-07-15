@@ -30,8 +30,8 @@ def printAlbumName(track):
 
 ### Album Art ###
 def setAlbumArt(track, imgPath):
-	with open('music_tag/test/sample/imgA.jpg', 'rb') as img_in:
-		track['artwork'] = img_in.read()
+	with open(imgPath, 'rb') as art:
+		track['artwork'] = art.read()
 
 ### Track ###
 def setTrackNumber(track, num):
