@@ -3,40 +3,26 @@ import re
 import os
 import sys
 import json
-from mutagen.mp3 import MP3
+import mutagen
+from mutagen.id3 import ID3, TPE1, TIT2, TRCK, TALB, APIC
 from bs4 import BeautifulSoup as bs
-from mutagen.id3 import ID3NoHeaderError
-from mutagen.id3 import ID3, TIT2, TALB, TPE1, TPE2, COMM, USLT, TCOM, TCON, TDRC, TRCK, APIC
 
+def getArtistName(albumJSON):
+	return albumJSON["artist"]
 
-def getArtistName(html):
-	data = bs(html, features='html.parser')
-	name = data.find_all("span", {"itemprop":"byArtist"})[0].find("a").string
-	return name.replace(':','׃').replace('<','﹤').replace('>','＞').replace('\"','').replace('/','∕').replace('|','').replace('*','').replace('?','')
-
-def getAlbumName(html):
-	data = bs(html, features='html.parser')
-	names = data.find('head').find('title').contents[0]
-	return names[:names.find('|')-1].replace(':','׃').replace('<','﹤').replace('>','＞').replace('\"','').replace('/','∕').replace('|','').replace('*','').replace('?','')
+def getAlbumName(albumJSON):
+	return albumJSON["current"]["title"]
 
 def getAlbumJSON(html):
-	# get album page
-	# create a BeautifulSoup object out of the album page html
 	data = bs(html, features='html.parser')
-	albumData = ""
-	# find all script tags in data and loop through them
-	for tag in data.find_all('script'):
-		# if the tag contains a variable named TralbumData
-		if('TralbumData' in str(tag)):
-			# set albumData to the content of the TralbumData variable which will always match this regex
-			albumData = re.search(r'trackinfo: \[{.*?}\]', str(tag))
-			break
-	# make a json object out of albumData (unwrapping the 'trackinfo' data)
-	albumJSON = json.loads(albumData.group(0).replace('trackinfo: ', ''))
-	# return the album JSON
-	return albumJSON
-	# VVV this is how you return the pretty album JSON VVV
-	# return json.dumps(albumJSON, indent=4, sort_keys=True )
+	return json.loads(data.find_all("script", {"data-tralbum": True})[0]["data-tralbum"])
+	# print(json.dumps(albumJSON, indent=4, sort_keys=True ))
+
+def getURLFormattedArtistName(link):
+	return link[8:link.find('.')]
+
+def getURLFormattedAlbumName(link):
+	return link[link.rfind('/')+1:]
 
 def getAlbumArt(link, cd, html):
 	album = getURLFormattedAlbumName(link)
@@ -49,41 +35,43 @@ def getAlbumArt(link, cd, html):
 	
 	return cd+'/'+artist+'-'+album+'AlbumArt.jpg'
 
-def getTrack(cd, album, artist, art, trackJSON):
-	name = trackJSON['title'].replace(':','׃').replace('<','﹤').replace('>','＞').replace('\"','').replace('/','∕').replace('|','').replace('*','').replace('?','')
+def getTrack(cd, album, artist, artPath, trackJSON):
+	name = trackJSON["title"]
 	print('downloading '+name+'...')
 	print(trackJSON['file']['mp3-128'])
 	trackResp = requests.get(trackJSON['file']['mp3-128'])
-	with open(cd+'/'+name+'.mp3', 'wb') as f:
+	trackPath = cd+'/'+name+'.mp3'
+	with open(trackPath, 'wb') as f:
 		f.write(trackResp.content)
 
-	try: 
-	    track = ID3(cd+'/'+name+'.mp3')
-	except ID3NoHeaderError:
-	    print("Adding ID3 header")
-	    track = ID3()
+	try:
+		tg = ID3(trackPath)
+	except mutagen.id3.ID3NoHeaderError:
+		tg = mutagen.File(trackPath)
+		tg.add_tags()
 
-	track["TIT2"] = TIT2(encoding=3, text=trackJSON['title'])
-	track["TALB"] = TALB(encoding=3, text=album)
-	track["TPE2"] = TPE2(encoding=3, text=artist)
-	track["TPE1"] = TPE1(encoding=3, text=artist)
-	track["TRCK"] = TRCK(encoding=3, text=str(trackJSON['track_num']))
-	track["APIC"] = APIC(
-        encoding=3, # 3 is for utf-8
-        mime='image/jpeg', # image/jpeg or image/png
-        type=3, # 3 is for the cover image
-        desc=u'Cover',
-        data=open(art, 'rb').read()
-    )
+	tg['TPE1'] = TPE1(encoding=3, text=artist)
+	tg['TALB'] = TALB(encoding=3, text=album)
+	tg['TIT2'] = TIT2(encoding=3, text=name)
+	tg['TRCK'] = TRCK(encoding=3, text=str(trackJSON["track_num"]))
 
-	track.save(cd+'/'+name+'.mp3')
+	with open(artPath, 'rb') as art:
+		tg['APIC'] = APIC(
+			data=art.read(),
+			mime='image/jpeg',
+			type=3, desc=u'Cover',
+			encoding=3
+		)
+		tg.save()
 
 def getAlbum(link, downloadDirectory):
 	html = requests.get(link).content
-	album = getAlbumName(html)
+	albumJSON = getAlbumJSON(html)
+	album = getAlbumName(albumJSON)
+	artist = getArtistName(albumJSON)
+
 	print("\n### Downloading "+album+" ###")
 	# if the artist's folder doesn't exist in the downloadDirectory
-	artist = getArtistName(html)
 	if(not os.path.exists(downloadDirectory+'/'+artist)):
 		# make a folder for the artist
 		os.mkdir(downloadDirectory+'/'+artist)
@@ -93,20 +81,16 @@ def getAlbum(link, downloadDirectory):
 	if(not os.path.exists(downloadDirectory+'/'+album)):
 		# make a folder for the album
 		os.mkdir(downloadDirectory+'/'+album)
-	# make the downloadDirectory that album's folder in the artist's folder  
+	# make the downloadDirectory the album's folder in the artist's folder  
 	downloadDirectory = downloadDirectory+'/'+album
+
 	# download album art (this is not strictly neccessary)
 	art = getAlbumArt(link, downloadDirectory, html)
-	# for every track object in the album JSON (which is an list)
-	for track in getAlbumJSON(html):
+
+	# for every track object in the albumJSON["track-info"] (which is a list)
+	for trackJSON in albumJSON["trackinfo"]:
 		# download the track
-		getTrack(downloadDirectory, album, artist, art, track)
-
-def getURLFormattedArtistName(link):
-	return link[8:link.find('.')]
-
-def getURLFormattedAlbumName(link):
-	return link[link.rfind('/')+1:]
+		getTrack(downloadDirectory, album, artist, art, trackJSON)
 
 # usage and arg checking
 if(len(sys.argv) < 2):
@@ -138,7 +122,3 @@ else:
 	# it doesn't, so it's an artist link
 	for alb in bs(html, features='html.parser').find("div", {"class":"leftMiddleColumns"}).find("ol").find_all("li"):
 		getAlbum(link+alb.find("a")["href"], downloadDirectory)
-
-
-# Meth Wax - 048: Meth Wax
-# The Mountain Goats - Song for Sasha Banks
